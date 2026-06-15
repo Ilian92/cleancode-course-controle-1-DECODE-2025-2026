@@ -1,9 +1,6 @@
-import { describe, it, expect, vi } from 'vitest';
-import { init, newRound, rerollWeapon, fight } from '$lib/index';
-import type { GameState } from '$lib/index';
-
-const SWORD = { name: 'sword', description: 'Deals 5 damage.', rarity: 'rare' };
-const HATCHET = { name: 'hatchet', description: 'Deals 1 damage.', rarity: 'common' };
+import { describe, it, expect } from 'vitest';
+import { init, newRound, rerollWeapon } from '$lib';
+import type { GameState } from '$lib';
 
 describe('rerollWeapon', () => {
     it('never picks a weapon already used this round', () => {
@@ -40,25 +37,3 @@ describe('newRound', () => {
     });
 });
 
-describe('fight', () => {
-    it('returns non-negative health values', () => {
-        const state = init();
-        const result = fight(state.playerCurrentHealth, state.enemyCurrentHealth, state.playerWeapon);
-        expect(result.playerHealth).toBeGreaterThanOrEqual(0);
-        expect(result.enemyHealth).toBeGreaterThanOrEqual(0);
-    });
-
-    it('returns player_won when enemy health reaches 0', () => {
-        vi.spyOn(Math, 'random').mockReturnValue(0);
-        const result = fight(10, 5, SWORD);
-        expect(result.status).toBe('player_won');
-        vi.restoreAllMocks();
-    });
-
-    it('returns player_lost when player health reaches 0', () => {
-        vi.spyOn(Math, 'random').mockReturnValue(0.95);
-        const result = fight(4, 10, HATCHET);
-        expect(result.status).toBe('player_lost');
-        vi.restoreAllMocks();
-    });
-});

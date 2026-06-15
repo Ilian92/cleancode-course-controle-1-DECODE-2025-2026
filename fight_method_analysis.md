@@ -1,40 +1,39 @@
-# Analysis of the `fight()` method
+# Analyse de la méthode `fight()`
 
-## Issues identified
+## Nommage
 
-### 1. Deeply nested conditionals ("pyramid of doom")
-The function wraps its entire logic in three nested `if` blocks (`hasInit → hasRound → !hasFought`). This pushes the real work far to the right and makes the function hard to read. Guard clauses (early returns on invalid conditions) would flatten this immediately.
+Le type de retour original `Array<number|boolean>` force à accéder aux valeurs par position (`response[4]`), sans aucune indication sur ce que représente chaque index. La fonction retourne désormais un objet `FightResult` typé avec des propriétés nommées (`playerHealth`, `enemyHealth`, `enemyWeapon`, `status`).
 
-### 2. Returns a mixed, untyped array
-The return type `Array<number|boolean>` is opaque. Callers access values by position (`response[4]`), which is fragile and gives no indication of what each index means. A plain typed object (`{ playerHealth, enemyHealth, enemyWeapon, status }`) is self-documenting and safe to destructure.
+Le paramètre `playerWeapon: any` abandonnait toute sécurité de typage (un peu le but de typescript). L'interface `Weapon` rend la forme explicite et laisse le compilateur détecter les erreurs.
 
-### 3. Duplicated switch statement
-The exact same weapon-to-damage logic is written twice, once for the player and once for the enemy. Any future weapon change must be applied in two places. Extracting a `calculateDamage(weapon)` helper eliminates the duplication entirely.
+## Commentaires
 
-### 4. The switch itself is not clean
-A `switch` on string names that grows with every new weapon is hard to maintain. A `Record<string, () => number>` lookup map is shorter, eliminates `break` statements, and makes it trivial to add or remove a weapon in one line.
+La fonction originale contenait des commentaires comme `// health cannot be negative` ou `// check if the game is over`. Ces commentaires décrivent ce que fait le code, ce qui devrait être évident à la lecture. Ils ont été supprimés pour avoir à la place des fonctions bien nommées : `preventNegative`, `determineStatus`.
 
-### 5. Too many responsibilities in one function
-The function validates game state, picks the enemy weapon, calculates damage for both sides, applies net damage, clamps health, and determines the winner. Each of those is a distinct concern. Extracting helpers (`pickRandomWeapon`, `calculateDamage`, `clampToZero`, `determineStatus`) makes each step testable in isolation and keeps `fight` itself short.
+## Taille et responsabilités
 
-### 6. Six parameters, three of which are boolean guards
-`hasInit`, `hasRound`, and `hasFought` are only used to validate pre-conditions. They are a sign that the function is being called to manage state it should not own. Replacing the three boolean flags with a single `GameStatus` string (handled in the caller) removes these parameters entirely.
+La fonction originale faisait tout à la fois : valider l'état du jeu, choisir l'arme ennemie, calculer les dégâts des deux côtés, les appliquer, empêcher la santé de passer en négatif, et déterminer le gagnant. Chacune de ces responsabilités a été extraite dans sa propre fonction :
 
-### 7. Misleading comments
-`// health cannot be negative` and `// check if the game is over` describe *what* the code does, which should be obvious from well-named code. `// reset weapon list so the enemy could play` is the only comment hinting at a non-obvious side effect — and that side effect (`weaponList = weapons`) has no business being inside a `fight` function in the first place.
+- `pickRandomWeapon` — pioche une arme au hasard
+- `calculateDamage` — calcule les dégâts d'une arme
+- `netDamage` — calcule les dégâts nets entre deux combattants
+- `preventNegative` — empêche la santé de passer en négatif
+- `determineStatus` — détermine l'issue du combat
 
-### 8. `any` type for weapons
-`playerWeapon: any` discards all type safety. A simple `Weapon` interface makes the shape explicit and lets the compiler catch misuse.
+`fight` elle-même se résume à orchestrer ces étapes.
 
-## Summary of fixes
+## Paramètres
 
-| Issue | Fix |
-|---|---|
-| Nested conditionals | Guard clauses (early `throw`) |
-| Mixed array return | Typed `FightResult` object |
-| Duplicated switch | Extract `calculateDamage(weapon)` helper |
-| Switch maintainability | Replace with `weaponDamage` lookup map |
-| Long function | Extract `pickRandomWeapon`, `clampToZero`, `determineStatus` helpers |
-| Boolean flag parameters | Single `GameStatus` union type owned by the caller |
-| `any` types | `Weapon` interface |
-| Side effects in `fight` | Remove `weaponList = weapons` from `fight` |
+La fonction originale prenait 6 paramètres dont 3 booleans (`hasInit`, `hasRound`, `hasFought`). Passer des booleans en paramètre est à éviter : ils impliquent un `if` à l'intérieur et obligent le lecteur à retenir ce qu'ils représentent pendant toute la lecture. Ces paramètres ont été supprimés, le contrôle du flux se fait maintenant avec un `GameStatus`.
+
+## Switch et duplication
+
+Le même `switch` sur le nom de l'arme était écrit deux fois dans la fonction originale, une fois pour le joueur et une fois pour l'ennemi. Toute modification d'une arme devait être appliquée à deux endroits. La logique a été extraite dans `calculateDamage`, et le `switch` remplacé par une map `weaponDamage` de type `Record<string, () => number>`. Ajouter une arme revient désormais à ajouter une seule ligne.
+
+## Structures imbriquées
+
+La logique principale se trouvait sous trois niveaux de `if` imbriqués (`hasInit -> hasRound -> !hasFought`). Ces conditions n'appartiennent pas à `fight()` : elles gèrent l'état du jeu, pas le combat. Elles ont été supprimées de la fonction, et le contrôle du flux a été délégué via un `GameStatus`.
+
+## Side effect
+
+La ligne `weaponList = weapons` modifiait une variable globale à l'intérieur de `fight`. Une fonction qui retourne une valeur ne doit pas avoir de side effect. Cette ligne a été supprimée.
